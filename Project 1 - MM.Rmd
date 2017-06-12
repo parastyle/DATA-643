@@ -1,0 +1,110 @@
+---
+title: "DATA 643 : Project 1 : Global Baseline PRedictors and RMSE"
+author: "Michael Muller"
+date: "June 10, 2017"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+
+
+### The purpose of this recommender system is to predict which jokes will be found more or less funny by an individual user. We are using a fraction of the Jester data set found here.  http://www.ieor.berkeley.edu/~goldberg/jester-data/
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(prettydoc)
+library(reshape2)
+library(readxl)
+```
+
+Data loads into R dataframe. Replace values '99' with 'NA'.  
+I convert the scores from -10:10 to 0:20 for RMSE purposes.  
+I focus on the dense portion of my dataframe for the remainder of this project. (Most jokes filled out with user values)  
+
+
+```{r}
+column_names = seq(0, 100, 1)
+column_names[1] = 'User'
+df = read_xls(path = "jester-data-2.xls",col_names = column_names)
+df[df==99] <- NA
+df$User = NULL
+dense_df = subset(df,select=(5:20))
+```
+
+The purpose of this function is to create a test set and training set.  
+```{r}
+#This function was taken from 'Building a Recommendation System with R' 
+which_train <- sample(x = c(TRUE, FALSE), size = nrow(dense_df),
+replace = TRUE, prob = c(0.8, 0.2))
+train_set = dense_df[which_train, ] +10
+test_set = dense_df[!which_train,] +10
+```
+
+This function computes the raw average of the user-item matrix  
+
+```{r}
+raw_average = function(x){
+  return(sum(colSums(x,na.rm = TRUE)) / length(which(!is.na(x))))
+}
+
+raw_average_train = raw_average(train_set)
+raw_average_test = raw_average(test_set)
+raw_average_test
+raw_average_train
+
+```
+
+This function computes RMSE
+```{r}
+#found from ('https://stackoverflow.com/questions/26237688/rmse-root-mean-square-deviation-calculation-in-r')
+RMSE = function(x,y){
+  sqrt( mean (((x-y)^2), na.rm=TRUE) )
+}
+RMSE(train_set,raw_average_train)
+RMSE(test_set,raw_average_train)
+```
+
+You can see using the raw average of the training set user-item matrix; we error in around 5 points of what a user might rate a specific joke.  
+
+
+These functions compute user and item bias. (Jokes in this case)  
+
+```{r}
+userBias = function(df,raw_avg){
+  return(rowMeans(df,na.rm=TRUE) - raw_avg)
+}
+jokeBias = function(df,raw_avg){
+  return(colMeans(df,na.rm=TRUE)-raw_avg)
+}
+```
+
+I use the above functions to create some baseline predictions.  
+
+```{r}
+baseline_predictors = function(df){
+  user_bias = userBias(df,raw_average(df))
+  joke_bias = jokeBias(df,raw_average(df))
+
+  df[!is.na(df)] = raw_average(df)
+  
+  df = df + user_bias + joke_bias
+  
+  return(df)
+}
+```
+#### Lets see when we account for user and item biases in our user-item matrix, what our RMSE is for the training set, and then the test set.
+```{R}
+baseline_training_set = baseline_predictors(train_set)
+baseline_test_set = baseline_predictors(test_set)
+RMSE(baseline_training_set,raw_average_train)
+RMSE(baseline_test_set,raw_average_test)
+```
+
+Our recommender system, successfully predicts user-item rating within 3 points out of 20. The RMSE is very consistent between training and test data.  
+Below is the head of the test sets predicted baseline values; below 10 means the user will probably not like the item (joke)  
+
+```{r}
+head(baseline_test_set)
+```
